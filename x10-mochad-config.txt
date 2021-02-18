@@ -1,0 +1,13 @@
+# ----------------------------------------------------
+# X10-ID;WebThings-ID;property;on-value;off-value
+# ----------------------------------------------------
+C5;zwave-d79b7f78-8;on;true;false
+C8;virtual-things-custom-77e70217-739b-4aae-ac2a-cee49dc4dafa;pressed;true;true
+O9;zwave-d79b7f78-8;on;true;false
+O10;zwave-d79b7f78-6;on;true;false
+O11;zwave-d79b7f78-7;on;true;false
+O12;zwave-d79b7f78-9;on;true;false
+O13;virtual-things-custom-77e70217-739b-4aae-ac2a-cee49dc4dafa;pressed;true;true
+O14;zwave-d79b7f78-2;on;true;false
+O15;zwave-d79b7f78-3;on;true;false
+O16;zwave-d79b7f78-4;on;true;false
