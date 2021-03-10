@@ -8,16 +8,14 @@
 #
 # Program Dependencies:
 #  A running "mochad" process communicating to X10 USB port.  Can be co-resident on RPI.
-#  netcat, awk installed.   sudo apt install netcat awk
-#
-#  WebThings authorization key created to allow remote commands.
+#  netcat installed.   sudo apt install netcat
 #
 # Automatically start this program after a system reboot.
 # Create a new contab entry with this line:
 #
 # @reboot /path/to/mochad/x10-mochad-start.sh
 #
-# v0.4b 
+# v0.41 
 # ---------------------------------------------------------------------------
 export MYDEBUG=""
 
@@ -27,13 +25,12 @@ PROG_PATH="`( cd \"$PROG_PATH\" && pwd )`"  # now its absolute
 # ---------------------------------------------------------------------------
 # Customize configuration settings
 # ---------------------------------------------------------------------------
-#export MOCHAD_SERVER="127.0.0.1 1099"
-export MOCHAD_SERVER="elerpi.local 1099"
+export MOCHAD_SERVER="127.0.0.1 1099"
 
 # URL to WebThings GW
 export WTGW_URL="http://127.0.0.1:8080"
 # WebThings authorization key
-export WTGW_AKEY="eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImYxY2E4Y2UwLWU2YzAtNDA3NC1hOGQxLTY4YjU2MTIxMWNhZSJ9.eyJyb2xlIjoidXNlcl90b2tlbiIsImlhdCI6MTYwODU3NjYxNCwiaXNzIjoiTm90IHNldC4ifQ.tKo5n6cZGJgzPHoU8AVWAEIZJU1fld41W_Ykf4BD5jEd4Kpw36EnRHyZnT_BQrrjdwno3O80sSNn2yGjRZTrnQ"
+export WTGW_AKEY="eyJhbGciOiJFUzI1NiAtNDA3NC1hOGQxLTY4YjU2MTIxMWNhZSJ9.eyJyb2xlIjoidXNlcl90b2tlbiIsImlhdCI6MTYwODU3NjYxNCwiaXNzIjoiTm90IHNldC4ifQ.tKo5n6cZGJgzPHoU8AVWAEIZJU1fld41W_Ykf4BD5jEd4Kpw36EnRHyZnT_BQrrjdwno3O80sSNn2yGjRZTrnQ"
 
 
 # Associative array, index key: x10id-x10prop-x10val, storing epoch seconds since last time cmd was executed.
@@ -206,7 +203,11 @@ WTGW_SETPROPERTY() {
 
     # X10 id is not defined in configuration file
     local _tmp="${X10_X10ID[$_x10id]}"
-    [ -z  "${_tmp}" ] && return
+    if [ -z  "${_tmp}" ]
+    then
+        echo "$(TIMESTAMP): WTGW_SETPROPERTY  x10 id: ${_x10id}, not defined in configuration map"
+        return
+    fi
 
     local _x10wtid="${X10_WTID[$_x10id]}"
     local _x10prop="${X10_PROP[$_x10id]}"
@@ -222,54 +223,54 @@ WTGW_SETPROPERTY() {
 
     if [ -z ${_x10wtid} ] || [ -z ${_x10prop} ] || [ -z ${_x10val} ]
     then
-        echo "$0: ERROR: x10ADDR(${_x10id}) _x10wtid(${_x10wtid}), _x10prop(${_x10prop}), _x10val(${_x10val}), not formatted correctly"
+        echo "$(TIMESTAMP): WTGW_SETPROPERTY ERROR: x10ADDR(${_x10id}) _x10wtid(${_x10wtid}), _x10prop(${_x10prop}), _x10val(${_x10val}), not formatted correctly"
         return
     fi
 
     # do not execute same command again if it executed in the last SETPROPERTY_HIST_SEC seconds
-    # this occurs when X10 controller is configured as housecode tranceiver which obtains Rx RF commands 
-    #  and then re-transmitts them as Tx PL commands (and yet another Rx RF command)
     local _key="${_x10id}-${_x10prop}-${_x10val}"
-    local _epochcur=`date +%s`
-    local _epochprev="${SETPROPERTY_HIST_DATE[$_key]}"      # epoch time command last executed
-    local _secdiff=""
+    local _epochcur="`date +%s`"
+    local _epochprev="${SETPROPERTY_HIST_DATE[$_key]}"
+    local _secdiff="-1"
     if [ -n "${_epochprev}" ] && [ -n "${_epochcur}" ]
     then
         _secdiff=$(expr $_epochcur - $_epochprev)
-        [ -n "${MYDEBUG}" ] && echo "DEVTEST: _secdiff: ${_secdiff}, SETPROPERTY_HIST_SEC: ${SETPROPERTY_HIST_SEC}"
         if [ "${_secdiff}" -le "${SETPROPERTY_HIST_SEC}" ]
         then
-            echo "$(TIMESTAMP): WTGW_SETPROPERTY: Ignoring Operation Repeated Quickly (<${SETPROPERTY_HIST_SEC}s), ${_x10id}:${_x10wtid}:${_x10prop}:${_x10val}"
+            echo "$(TIMESTAMP): WTGW_SETPROPERTY: repeated-to-soon: _secdiff: ${_secdiff}, _epochcur: ${_epochcur}, _epochprev: ${_epochprev} "
             return
         fi
     fi 
     SETPROPERTY_HIST_DATE[${_key}]=${_epochcur}
 
-    echo "$(TIMESTAMP): WTGW_SETPROPERTY: ${_x10id}:${_x10wtid}:${_x10prop}:${_x10val}"
-    
-
-    ## DEVTEST
-    [ -n "${MYDEBUG}" ] && return
+    echo "$(TIMESTAMP): WTGW_SETPROPERTY executing: ${_x10id}:${_x10wtid}:${_x10prop}:${_x10val}"  
 
     local xTIMEOUT=" --connect-timeout 10 --max-time 30 "
 
-# This program ($$) crashed when a curl timeout occurs.
-# Read that if "bash -e" was the root shell it would terminate if any command failed with any non-zero exit code.
-# The "-e" option was removed so this may not be an issue anymore.
-# To resolve the issue, we place the curl program in a sub-shell
- xRet=$(
-     curl ${xTIMEOUT} \
-    -H "Authorization:Bearer ${WTGW_AKEY}" \
-    -H "Content-Type: application/json" \
-    -H "Accept: application/json" \
-    -X PUT -d '{"'${_x10prop}'":'${_x10val}'}' \
-    --insecure --silent --show-error \
-    ${WTGW_URL}/things/${_x10wtid}/properties/${_x10prop} \
-    > ${X10_MOCHAD_LOGDIR}/x10-mochad-curl-output.txt 2>&1
-    _Exit=${?}
-    echo -e "\ncURL Exit Code:  ${_Exit}" >>${X10_MOCHAD_LOGDIR}/x10-mochad-curl-output.txt
-    echo ${_Exit}
- )
+    # This program ($$) crashed when a curl timeout occurs.
+    # Read that if "bash -e" was the root shell it would terminate if any commands failed with "any" exit code.
+    # The "-e" option was removed so this may not be an issue?
+    # Just in case, place the curl program in a sub-shell to prevent issue during --max-time timeouts which occasionaly happen
+    xRet=$(
+        curl ${xTIMEOUT} \
+        -H "Authorization:Bearer ${WTGW_AKEY}" \
+        -H "Content-Type: application/json" \
+        -H "Accept: application/json" \
+        -X PUT -d '{"'${_x10prop}'":'${_x10val}'}' \
+        --insecure --silent --show-error \
+        ${WTGW_URL}/things/${_x10wtid}/properties/${_x10prop} \
+        > ${X10_MOCHAD_LOGDIR}/x10-mochad-curl-output.txt 2>&1
+        _Exit=${?}
+        echo "cURL exit (${_Exit})" >>${X10_MOCHAD_LOGDIR}/x10-mochad-curl-output.txt
+        echo ${_Exit}
+    )
+
+    # Update date stamp at completion
+    # Some commands take a long time to complete and may even time out
+    # This could exceed SETPROPERTY_HIST_SEC seconds allowing commands that are repeated/mirrored by multiple 
+    #   trancievers to execute "too soon"
+    _epochcur="`date +%s`"
+    SETPROPERTY_HIST_DATE[${_key}]=${_epochcur}
 
 }
 
@@ -319,10 +320,11 @@ do
         elif echo "${line}" | grep "Func: Off" > /dev/null
         then _x10button="off"
         else
-            echo "$(TIMESTAMP): X10MOCHAD:  ERROR:  unknown Func: [on|off] value"
+            echo "$(TIMESTAMP): SINGLELINE: ERROR, unknown Func: [on|off] value"
             continue   # next line
         fi      
 
+        echo "$(TIMESTAMP): SINGLELINE:  _x10id: $_x10id, x10button: ${_x10button}"  
         WTGW_SETPROPERTY "${_x10id}" "${_x10button}"
 
         _x10id=""
@@ -363,7 +365,7 @@ do
             elif echo "${line}" | grep "Func: Off" > /dev/null
             then _x10button="off"
             else
-                echo "$(TIMESTAMP): MULTILINE ERROR:  unknown mode for Func: [on|off] value"
+                echo "$(TIMESTAMP): MULTILINE:  ERROR, unknown mode for Func: [on|off] value"
                 _x10id=""
                 _x10housecode=""
                 _x10houseunit=""
@@ -371,8 +373,7 @@ do
                 continue  # next line
             fi
 
-            [ -n "${MYDEBUG}" ] && echo "$(TIMESTAMP): X10MOCHAD MULTILINE:  _x10houseunit: $_x10houseunit, _x10housecode: $_x10housecode, x10button: ${_x10button}"
-    
+            echo "$(TIMESTAMP): MULTILINE:  _x10houseunit: $_x10houseunit, _x10housecode: $_x10housecode, x10button: ${_x10button}"  
             WTGW_SETPROPERTY "${_x10houseunit}${_x10housecode}" "${_x10button}"
         fi
 
